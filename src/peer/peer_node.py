@@ -1,56 +1,60 @@
-import logging
+import time
 from threading import Thread
-from .peer import p2p_communication
-from .peer import file_manager
+from .p2p_communication import P2PCommunication
+from .file_manager import FileManager
 
 class PeerNode:
-    def __init__(self, peer_id, tracker_url):
+    def __init__(self, peer_id: str, tracker_url: str):
         self.id = peer_id
         self.tracker_url = tracker_url
-        self.blocks = {}  # {block_name: data}
-        self.peers = []   # Lista de peers conhecidos
-        self.running = True
-        self.file_manager = file_manager.FileManager()
-        logging.basicConfig(level=logging.INFO)
+        self.blocks = {} 
+        self.peers = []   
+        self.p2p = P2PCommunication(self)
+        self.file_manager = FileManager()
 
     def start(self):
-        """Inicia o peer (registro + servidor P2P)"""
+        """Inicia serviços do peer"""
         self._register_with_tracker()
-        Thread(target=self._listen_for_peers).start()
-        logging.info(f"Peer {self.id} iniciado!")
+        Thread(target=self.p2p.start_server, daemon=True).start()
+        Thread(target=self._download_loop, daemon=True).start()
 
     def _register_with_tracker(self):
-        """Registra peer no tracker e obtém blocos iniciais"""
+        """Registra peer e obtém lista inicial de blocos/peers"""
+        import requests
         try:
-            import requests
             response = requests.post(
                 f"{self.tracker_url}/register",
-                json={"peer_id": self.id, "blocks": list(self.blocks.keys())}
+                json={
+                    "peer_id": self.id,
+                    "blocks": list(self.blocks.keys()),
+                    "port": self.p2p.port
+                }
             )
             data = response.json()
-            self.peers = data.get("peers", [])
-            self._store_blocks(data.get("assigned_blocks", []))
+            self.peers = [tuple(p.split(":")) for p in data["peers"]]  
+            self._store_blocks(data["assigned_blocks"])
         except Exception as e:
-            logging.error(f"Falha ao registrar no tracker: {e}")
+            logging.error(f"Falha no registro: {e}")
 
-    def _listen_for_peers(self, port=5000):
-        """Escuta conexões de outros peers"""
-        p2p_communication.start_server(self, port)
+    def _download_loop(self):
+        """Busca blocos faltantes periodicamente"""
+        while True:
+            missing_blocks = [b for b, data in self.blocks.items() if data is None]
+            for block in missing_blocks:
+                self._download_block(block)
+            time.sleep(10)  
 
-    def _store_blocks(self, block_names):
-        """Armazena blocos recebidos do tracker"""
-        for block in block_names:
-            if block not in self.blocks:
-                self.blocks[block] = None  # Será baixado depois
+    def _download_block(self, block_name: str):
+        """Tenta baixar bloco de peers disponíveis"""
+        for peer in self.peers:
+            if peer[0] != self.id:  
+                data = self.p2p.request_block((peer[0], int(peer[1])), block_name)
+                if data:
+                    self._store_block(block_name, data)
+                    break
 
-    def shutdown(self):
-        """Encerra o peer após verificar arquivo completo"""
-        if self._check_file_complete():
-            self.running = False
-            logging.info("Peer encerrado corretamente!")
-        else:
-            logging.warning("Arquivo incompleto! Não pode encerrar.")
-
-    def _check_file_complete(self):
-        """Verifica se todos os blocos foram baixados"""
-        return all(block_data is not None for block_data in self.blocks.values())
+    def _store_block(self, block_name: str, data: bytes):
+        """Armazena bloco localmente"""
+        self.blocks[block_name] = data
+        self.file_manager.save_block(block_name, data)
+        logging.info(f"Bloco {block_name} armazenado!")
