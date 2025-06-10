@@ -1,32 +1,35 @@
-# trabalho-sd
+# Sistema Distribuído P2P: MiniBit
 
-# Parte 1
+Implementação de um sistema de compartilhamento cooperativo de arquivos com estratégias distribuídas, inspirado no protocolo BitTorrent.
 
-# Dependências do Tracker
-# Para instalar: pip install -r requirements.txt
+### Requisitos
 
-# Servidor web para o tracker
-Flask==2.3.3
+- Python 3.8+
 
-# Requisições HTTP (para testar)
-requests==2.31.0
+Conteúdo do `requirements.txt`:
+```
+Flask==2.3.3 # Servidor web para o tracker
+requests==2.31.0 # Requisições HTTP (para testar)
+```
 
-# JSON handling (já incluído no Python)
-# json - built-in
+### JSON handling e outras dependências básicas (já incluídas no Python)
+- json - built-in
+- random - built-in
+- time - built-in
+- os - built-in
+- sys - built-in
 
-# Outras dependências básicas (já incluídas no Python)
-# random - built-in
-# time - built-in
-# os - built-in
-# sys - built-in
-
-Funcionalidades Implementadas
+## Funcionalidades Implementadas
 1. Servidor Principal (tracker_server.py)
 
 POST /registrar_peer: Registra novos peers no sistema
+
 GET /listar_peers: Lista peers disponíveis (exceto o solicitante)
+
 GET /status: Mostra status do tracker
+
 POST /desconectar_peer: Remove peer da lista de ativos
+
 
 2. Gerenciador de Peers (peer_manager.py)
 
@@ -34,28 +37,33 @@ Mantém lista de peers ativos
 Controla timestamps para detectar peers inativos
 Funcionalidades de adicionar/remover peers
 
+
 3. Distribuidor de Blocos (block_distributor.py)
 
 Distribui blocos iniciais aleatórios para novos peers
 Cada peer recebe 30-50% dos blocos totais
 Rastreia quais blocos cada peer possui
 
-Como Usar:
+### Como Usar:
 
 1. Instalar Dependências
 
-bash ~ pip install -r requirements.txt
+```bash
+pip install -r requirements.txt
+```
 
 2. Iniciar o Tracker
 
-bash ~ python start_tracker.py
+```bash
+python start_tracker.py
+```
 O tracker ficará disponível em: http://localhost:5000
 
 3. Testar o Tracker
 
-bash ~ python test_tracker.py
-
-# Parte 3
+```bash
+python test_tracker.py
+```
 
 ## Estratégias de Compartilhamento (`feature/strategies`)
 
