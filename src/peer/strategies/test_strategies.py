@@ -1,5 +1,3 @@
-# test_estrategias.py
-
 import time
 import random
 
@@ -147,7 +145,7 @@ def teste_t4t_avalia_optimistic_nao_promovido():
     fixos_atuais = ["p_fixo_bom1", "p_fixo_bom2"] 
     candidato = "p_optimista_ruim"
     mapa = {"p_fixo_bom1":{0},"p_fixo_bom2":{1},"p_optimista_ruim":{2},"outro":{0,1,2}, MEU_PEER_ID_TESTE:set()}
-    # Todos blocos comuns, todas pontuacoes 0.
+    # -- Todos blocos comuns, todas pontuacoes 0.
     todos_b, meus_b, max_f = {0,1,2}, set(), 2
     novos_f, novo_o = avaliar_e_atualizar_listas_unchoked(fixos_atuais, candidato, max_f, mapa, meus_b, todos_b, MEU_PEER_ID_TESTE)
     assert "p_optimista_ruim" not in novos_f, "Otimista ruim nao deveria ser promovido"

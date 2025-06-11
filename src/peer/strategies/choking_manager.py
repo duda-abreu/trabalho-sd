@@ -1,7 +1,4 @@
-# /src/peer/strategies/choking_manager.py
-
 import time
-# import random # nao vamos mais usar random diretamente aqui, vira do tit_for_tat
 
 # vamos importar as futuras funcoes do tit_for_tat
 from . import tit_for_tat_strategy # usando . para import relativo dentro do mesmo pacote 'strategies'
@@ -119,6 +116,6 @@ class ChokingManager:
     def esta_peer_unchoked(self, peer_id: str) -> bool:
         """verifica se um peer especifico esta na lista de unchoked pelo nosso peer"""
         # otimizacao: verificar o otimista primeiro se ele for diferente de None
-        if peer_id == self.peer_optimistic_unchoked and self.peer_optimistic_unchoked is not None:
+        if self.peer_optimistic_unchoked is not None and peer_id == self.peer_optimistic_unchoked:
             return True
         return peer_id in self.peers_fixos_unchoked

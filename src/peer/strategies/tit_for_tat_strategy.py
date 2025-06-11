@@ -86,7 +86,7 @@ def avaliar_e_atualizar_listas_unchoked(
         max_fixos: int, # numero maximo de slots para peers fixos unchoked
         mapa_de_blocos_global: dict[str, set[int]], # info de blocos de todos os peers
         meus_blocos: set[int], # meus blocos (nao usado diretamente aqui, mas em _calcular_pontuacao)
-        todos_os_blocos_do_arquivo: set[int], # todos os blocos possiveis do arquivo
+        todos_os_blocos_do_arquivo: set[int], #- todos os blocos possiveis do arquivo
         meu_peer_id: str
     ) -> tuple[list[str], str | None]:
     """
@@ -135,10 +135,10 @@ def avaliar_e_atualizar_listas_unchoked(
             peer_optimistic_final = peer_candidato_para_avaliacao
         # else: o candidato foi promovido ou ja era fixo e se manteve, entao o slot otimista
         # teoricamente fica 'vago' ate a proxima selecao aleatoria pelo ChokingManager,
-        # ou se um fixo foi rebaixado e nao era o candidato, ele poderia ser o otimista?
-        # a regra eh "4 fixos + 1 otimista". o otimista eh o que foi escolhido aleatoriamente e esta em 'teste'.
-        # se ele eh promovido, o 'teste' dele acabou com sucesso. o ChokingManager vai escolher um *novo* aleatorio
-        # no proximo ciclo de 10s. entao, se promovido, ele nao eh mais o 'optimistic_final'.
+        # pois a regra eh "4 fixos + 1 otimista". 
+        # o otimista eh o peer escolhido aleatoriamente para teste.
+        # se ele eh promovido a fixo, o 'teste' dele acabou com sucesso, e nao existe mais slot otimista para ele.
+        # o ChokingManager devera escolher um novo optimistic unchoke no proximo ciclo.
     
     # print(f"debug (tit_for_tat): resultado da avaliacao. Novos fixos: {nova_lista_fixos}, Novo optimistic: {peer_optimistic_final}")
     return nova_lista_fixos, peer_optimistic_final

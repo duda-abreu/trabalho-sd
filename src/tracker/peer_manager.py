@@ -6,12 +6,15 @@ class GerenciadorPeers:
         self.peers_ativos = {}
         print("Gerenciador de Peers iniciado")
     
-    def adicionar_peer(self, peer_id, ip, porta):
+    def adicionar_peer(self, peer_id, ip, porta, blocos=None):
         """Adiciona um novo peer à lista de ativos"""
+        if blocos is None:
+            blocos = []
         self.peers_ativos[peer_id] = {
             'peer_id': peer_id,
             'ip': ip,
             'porta': porta,
+            'blocos': blocos,
             'timestamp': time.time()
         }
         print(f"Peer adicionado: {peer_id} ({ip}:{porta})")

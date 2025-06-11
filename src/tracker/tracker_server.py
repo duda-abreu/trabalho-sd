@@ -8,6 +8,17 @@ app = Flask(__name__)
 # Instâncias dos gerenciadores
 gerenciador_peers = GerenciadorPeers()
 distribuidor_blocos = DistribuidorBlocos()
+tracker_peer_id = "tracker_seed"
+tracker_ip = "127.0.0.1"
+tracker_porta = 5000  # mesma porta do tracker
+
+# Lista com todos os blocos
+todos_blocos = list(range(distribuidor_blocos.total_blocos))
+
+# Adiciona o tracker como peer seed com todos os blocos
+gerenciador_peers.adicionar_peer(tracker_peer_id, tracker_ip, tracker_porta, blocos=todos_blocos)
+
+print(f"Tracker seed registrado com todos os blocos: {todos_blocos}")
 
 @app.route('/registrar_peer', methods=['POST'])
 def registrar_peer():
@@ -41,12 +52,16 @@ def listar_peers():
     """Lista peers disponíveis (exceto o solicitante)"""
     peer_id = request.args.get('peer_id')
     todos_peers = gerenciador_peers.listar_peers_ativos()
-    resultado = [p for p in todos_peers if p['peer_id'] != peer_id]
+    peers_disponiveis = [p for p in todos_peers if p['peer_id'] != peer_id]
+
+    if len(peers_disponiveis) >= 5:
+        peers_disponiveis = random.sample(peers_disponiveis, 4)
 
     return jsonify({
-        'peers': resultado,
-        'total': len(resultado)
+        'peers': peers_disponiveis,
+        'total': len(peers_disponiveis)
     })
+
 
 @app.route('/status', methods=['GET'])
 def status():
