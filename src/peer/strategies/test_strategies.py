@@ -1,5 +1,3 @@
-# test_estrategias.py
-
 import time
 import random
 

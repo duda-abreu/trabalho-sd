@@ -1,5 +1,3 @@
-# /src/peer/strategies/choking_manager.py
-
 import time
 # import random # nao vamos mais usar random diretamente aqui, vira do tit_for_tat
 
