@@ -55,14 +55,26 @@ pip install -r requirements.txt
 2. Iniciar o Tracker
 
 ```bash
-python start_tracker.py
+python src/tracker/start_tracker.py
 ```
 O tracker ficará disponível em: http://localhost:5000
 
-3. Testar o Tracker
+3. Iniciar um Peer
 
 ```bash
-python test_tracker.py
+python run_peer.py peer1 5001
+```
+
+Você verá mensagens indicando:
+Que o peer foi registrado com sucesso no tracker
+Quais blocos ele recebeu inicialmente
+Que ele está escutando na porta indicada
+
+4. Iniciar múltiplos peers com nomes e portas diferentes
+
+```bash
+python run_peer.py peer2 5002
+python run_peer.py peer3 5003
 ```
 
 ## Estratégias de Compartilhamento (`feature/strategies`)
