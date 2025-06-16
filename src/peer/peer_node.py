@@ -154,6 +154,8 @@ class PeerNode:
                     todos_os_blocos_do_arquivo=self.todos_os_blocos,
                     mapa_de_blocos_dos_peers=peers_map_for_rarity
                 )
+                
+                logging.info(f"{self.id}: RarestFirst escolheu bloco {block_to_request}")
 
             if block_to_request is None:
                 continue
@@ -178,12 +180,29 @@ class PeerNode:
                 peer_address = (peer_data['ip'], peer_data['porta'])
                 logging.info(f"Tentando baixar bloco {block_to_request} de {peer_data['peer_id']} ({peer_address}).")
                 
-                downloaded_data = P2PCommunication.request_block(peer_address, block_to_request)
+                downloaded_data = P2PCommunication.request_block(peer_address, block_to_request, self.id)
                 
                 if downloaded_data:
                     self._store_blocks([block_to_request], downloaded_data)
                     logging.info(f"✅ Baixou bloco {block_to_request} ({len(downloaded_data)} bytes) de {peer_data['peer_id']}.")
                     downloaded = True
+                    # Atualiza o tracker com os blocos atuais após download
+                    try:
+                        with self.data_lock:
+                            my_blocks_list = list(self.blocks.keys())
+                        requests.post(
+                            f"{self.tracker_url}/registrar_peer",
+                            json={
+                                "peer_id": self.id,
+                                "ip": self.my_ip,
+                                "porta": self.my_port,
+                                "blocks": my_blocks_list
+                            }
+                        )
+                        logging.info(f"Atualizou o tracker com {len(my_blocks_list)} blocos após download.")
+                    except Exception as e:
+                        logging.warning(f"Falha ao atualizar tracker após download de bloco {block_to_request}: {e}")
+
                     break # Passa para o próximo ciclo de download
                 else:
                     logging.warning(f"Falha ao baixar bloco {block_to_request} de {peer_data['peer_id']}. Tentando próximo peer.")

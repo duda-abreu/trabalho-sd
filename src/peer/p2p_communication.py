@@ -68,18 +68,28 @@ class P2PCommunication:
             data = full_data.decode('utf-8') # Decodifica a mensagem completa
 
             if data.startswith("REQUEST_BLOCK:"):
-                try:
-                    block_id = int(data.split(":")[1])
-                except ValueError:
-                    logging.warning(f"{peer_node.id} recebeu um ID inválido de bloco: {data}")
+                partes = data.split(":")
+                if len(partes) < 3:
+                    logging.warning(f"{peer_node.id} recebeu requisição malformada: {data}")
                     return
 
+                block_id = int(partes[1])
+                peer_id_remoto = partes[2]
+                
+                logging.debug(f"{peer_node.id}: Unchoked por mim: {peer_node.choking_manager.get_peers_unchoked_por_mim()}")
+                logging.debug(f"{peer_node.id}: Peer {peer_id_remoto} solicitou bloco {block_id}")
+                
+                if peer_id_remoto not in peer_node.choking_manager.get_peers_unchoked_por_mim():
+                    logging.info(f"{peer_node.id}: Recusou envio para {peer_id_remoto}, pois não está unchoked.")
+                    return 
+
                 logging.info(f"{peer_node.id} recebeu requisição por bloco: {block_id}")
+                
+                logging.debug(f"{peer_node.id} tem blocos: {list(peer_node.blocks.keys())}")
 
                 if block_id in peer_node.blocks:
-                    bloco_data = peer_node.blocks[block_id] # Pega os dados brutos do bloco
+                    bloco_data = peer_node.blocks[block_id]
                     if bloco_data is not None:
-                        # Prepara a mensagem de resposta: cabeçalho de tamanho + dados do bloco
                         response_header = struct.pack('>I', len(bloco_data))
                         conn.sendall(response_header + bloco_data)
                         logging.info(f"{peer_node.id} enviou bloco {block_id} ({len(bloco_data)} bytes)")
@@ -87,7 +97,6 @@ class P2PCommunication:
                         logging.warning(f"{peer_node.id} tem o bloco {block_id}, mas está vazio (None). Não enviou.")
                 else:
                     logging.warning(f"{peer_node.id} não possui o bloco {block_id}. Não enviou.")
-
             else:
                 logging.warning(f"{peer_node.id} recebeu mensagem desconhecida: {data}")
 
@@ -102,7 +111,7 @@ class P2PCommunication:
 
 
     @staticmethod
-    def request_block(peer_address: tuple[str, int], block_id: int, timeout_s: float = 5.0):
+    def request_block(peer_address: tuple[str, int], block_id: int, peer_id: str, timeout_s: float = 5.0):
         """Solicita um bloco de outro peer e retorna os dados do bloco."""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(timeout_s) # Define um timeout para a conexão e operações de socket.
@@ -110,7 +119,7 @@ class P2PCommunication:
                 s.connect(peer_address)
                 
                 # Prepara a mensagem de requisição: primeiro o cabeçalho de tamanho, depois os dados.
-                request_message = f"REQUEST_BLOCK:{block_id}".encode('utf-8')
+                request_message = f"REQUEST_BLOCK:{block_id}:{peer_id}".encode('utf-8')
                 request_header = struct.pack('>I', len(request_message)) # Empacota o tamanho da mensagem.
                 s.sendall(request_header + request_message) # Envia o cabeçalho e a mensagem.
                 logging.info(f"Solicitando bloco {block_id} de {peer_address}")
@@ -145,5 +154,4 @@ class P2PCommunication:
                 logging.error(f"Conexão recusada por {peer_address} ao requisitar bloco {block_id}. Peer pode não estar ativo.")
                 return None
             except Exception as e:
-                logging.error(f"Erro inesperado ao requisitar bloco {block_id} de {peer_address}: {e}", exc_info=True)
-                return None
+                logging.error(f"Erro inesperado no request_block de {peer_id}: {e}", exc_info=True)

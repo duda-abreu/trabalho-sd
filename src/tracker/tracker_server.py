@@ -1,12 +1,12 @@
 from flask import Flask, request, jsonify
-import random
 from tracker.block_distributor import DistribuidorBlocos
+from tracker.peer_manager import GerenciadorPeers
 
 app = Flask(__name__)
 
 # Instâncias dos gerenciadores
-distribuidor = DistribuidorBlocos(total_blocos=20) # Ajuste conforme necessário
-peers_ativos = {} # Dicionário: peer_id -> {'ip': '...', 'porta': ...}
+distribuidor = DistribuidorBlocos(total_blocos=20)
+gerenciador_peers = GerenciadorPeers()
 
 
 @app.route('/registrar_peer', methods=['POST'])
@@ -15,89 +15,80 @@ def registrar_peer():
     peer_id = data.get('peer_id')
     ip = data.get('ip')
     porta = data.get('porta')
-    
-    blocos_do_peer = data.get('blocks', []) 
+    blocos_do_peer = data.get('blocks', [])
 
-    # Usa peers_ativos e distribuidor diretamente
-    if peer_id not in peers_ativos: 
+    if gerenciador_peers.obter_peer(peer_id) is None:
         print(f"Novo peer registrado: {peer_id} em {ip}:{porta}")
-        peers_ativos[peer_id] = {'ip': ip, 'porta': porta}
-        
-        # Gera blocos iniciais aleatórios e atualiza o distribuidor
-        blocos_iniciais_distribuidos = distribuidor.distribuir_blocos_iniciais(peer_id)
-        # Mescla os blocos iniciais com os que o peer já informou (se for re-registro)
-        distribuidor.atualizar_blocos_peer(peer_id, list(set(blocos_iniciais_distribuidos) | set(blocos_do_peer)))
+        gerenciador_peers.adicionar_peer(peer_id, ip, porta)
+        blocos_iniciais = distribuidor.distribuir_blocos_iniciais(peer_id)
+        distribuidor.atualizar_blocos_peer(peer_id, list(set(blocos_iniciais) | set(blocos_do_peer)))
     else:
-
-        peers_ativos[peer_id]['ip'] = ip
-        peers_ativos[peer_id]['porta'] = porta
-        distribuidor.atualizar_blocos_peer(peer_id, blocos_do_peer) # Atualiza com os blocos informados pelo peer
-        blocos_iniciais_distribuidos = [] 
+        gerenciador_peers.adicionar_peer(peer_id, ip, porta)
+        distribuidor.atualizar_blocos_peer(peer_id, blocos_do_peer)
+        blocos_iniciais = []
 
     peers_para_retornar = []
-    for p_id, p_info in peers_ativos.items():
-        blocos_do_p = distribuidor.obter_blocos_peer(p_id) 
+    for peer in gerenciador_peers.listar_peers_ativos():
+        blocos_do_p = distribuidor.obter_blocos_peer(peer["peer_id"])
         peers_para_retornar.append({
-            "peer_id": p_id,
-            "ip": p_info['ip'],
-            "porta": p_info['porta'],
-            "blocks": blocos_do_p 
+            "peer_id": peer["peer_id"],
+            "ip": peer["ip"],
+            "porta": peer["porta"],
+            "blocks": blocos_do_p
         })
 
     return jsonify({
         "message": "Peer registrado com sucesso!",
         "peers": peers_para_retornar,
-        "blocos_iniciais": blocos_iniciais_distribuidos
+        "blocos_iniciais": blocos_iniciais
     })
+
 
 @app.route('/listar_peers')
 def listar_peers():
-    data = request.get_json(silent=True) # silent=True para não gerar erro se não houver JSON no GET
+    data = request.get_json(silent=True)
     peer_id_solicitante = request.args.get('peer_id')
-    
+    # Remove peers inativos com mais de 60s de inatividade
+    gerenciador_peers.limpar_peers_inativos(timeout=60)
+
     if data and 'blocks' in data and peer_id_solicitante:
-        # Atualiza os blocos do peer solicitante se ele enviou essa informação
         distribuidor.atualizar_blocos_peer(peer_id_solicitante, data['blocks'])
-            
-    peers_excluindo_solicitante = [
-        p_id for p_id in peers_ativos.keys() 
-        if p_id != peer_id_solicitante and distribuidor.obter_blocos_peer(p_id) 
+
+    # 🔄 Agora retorna todos os peers (exceto o solicitante)
+    peers_disponiveis = [
+        peer for peer in gerenciador_peers.listar_peers_ativos()
+        if peer["peer_id"] != peer_id_solicitante
     ]
 
-    # Implementa a regra: menos de 5 peers retorna todos, 5 ou mais retorna subconjunto aleatório
-    if len(peers_excluindo_solicitante) < 5:
-        selected_peers_ids = peers_excluindo_solicitante
-    else:
-        selected_peers_ids = random.sample(peers_excluindo_solicitante, min(5, len(peers_excluindo_solicitante)))
-    
-    peers_para_retornar = []
-    for p_id in selected_peers_ids:
-        p_info = peers_ativos[p_id]
-        blocos_do_p = distribuidor.obter_blocos_peer(p_id)
-        peers_para_retornar.append({
-            "peer_id": p_id,
-            "ip": p_info['ip'],
-            "porta": p_info['porta'],
-            "blocks": blocos_do_p 
+    resposta = []
+    for peer in peers_disponiveis:
+        blocos_do_p = distribuidor.obter_blocos_peer(peer["peer_id"])
+        resposta.append({
+            "peer_id": peer["peer_id"],
+            "ip": peer["ip"],
+            "porta": peer["porta"],
+            "blocks": blocos_do_p
         })
 
-    return jsonify({"peers": peers_para_retornar})
+    return jsonify({"peers": resposta})
+
 
 @app.route('/remover_peer', methods=['POST'])
 def remover_peer():
     data = request.get_json()
     peer_id = data.get('peer_id')
-    if peer_id in peers_ativos:
-        del peers_ativos[peer_id]
-        distribuidor.remover_peer(peer_id) 
+    if gerenciador_peers.obter_peer(peer_id):
+        gerenciador_peers.remover_peer(peer_id)
+        distribuidor.remover_peer(peer_id)
         print(f"Peer {peer_id} removido do tracker.")
         return jsonify({"message": "Peer removido com sucesso!"}), 200
     return jsonify({"message": "Peer não encontrado."}), 404
 
+
 @app.route('/status')
 def status():
-
     return jsonify(distribuidor.obter_estatisticas_blocos())
+
 
 if __name__ == '__main__':
     print("\n==================================================")
@@ -112,10 +103,10 @@ if __name__ == '__main__':
     print("- POST /registrar_peer     - Registra novo peer")
     print("- GET  /listar_peers       - Lista peers disponíveis")
     print("- GET  /status             - Status do tracker")
-    print("- POST /remover_peer       - Remove peer") 
+    print("- POST /remover_peer       - Remove peer")
     print("\nPara testar o tracker:")
     print("curl http://localhost:5000/status")
     print("\nPressione Ctrl+C para parar o servidor")
     print("==================================================")
-    
+
     app.run(host='0.0.0.0', port=5000, debug=True)

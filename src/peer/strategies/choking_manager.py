@@ -1,3 +1,5 @@
+import logging
+
 import time
 import logging 
 from typing import Optional, Set, List, Dict
@@ -95,6 +97,8 @@ class ChokingManager:
 
         self.peers_fixos_unchoked = novos_fixos
         self.peer_optimistic_unchoked = novo_optimistic_final
+        
+        logging.info(f"{self.meu_peer_id}: Unchoked fixos: {self.peers_fixos_unchoked}, Optimista: {self.peer_optimistic_unchoked}")
 
         # print(f"debug ({self.meu_peer_id}): estado apos ciclo: Fixos: {self.peers_fixos_unchoked}, Optimistic: {self.peer_optimistic_unchoked}")
 
