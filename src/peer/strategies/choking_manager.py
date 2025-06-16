@@ -1,10 +1,7 @@
 import time
-# import random # nao vamos mais usar random diretamente aqui, vira do tit_for_tat
-
-# vamos importar as futuras funcoes do tit_for_tat
-from . import tit_for_tat_strategy # usando . para import relativo dentro do mesmo pacote 'strategies'
-
-# e talvez da logica de raridade para avaliar os peers (ja temos o rarest_first)
+import logging 
+from typing import Optional, Set, List, Dict
+from . import tit_for_tat_strategy
 from . import rarest_first 
 
 class ChokingManager:
@@ -57,17 +54,11 @@ class ChokingManager:
         return (timestamp_atual - self.ultimo_timestamp_optimistic) >= self.intervalo_optimistic_s
 
     def executar_ciclo_unchoking(self, timestamp_atual: float, 
-                                 mapa_de_blocos_global: dict[str, set[int]], 
-                                 meus_blocos: set[int], 
-                                 todos_os_blocos_do_arquivo: set[int]):
-        """
-        principal metodo de logica, chamado periodicamente pelo peer.
-        decide quem sera o optimistic unchoke e quem entra/sai da lista de fixos,
-        delegando as decisoes para o modulo tit_for_tat_strategy.
-        """
-        # print(f"debug ({self.meu_peer_id}): executando ciclo unchoking em {timestamp_atual}")
+                                 mapa_de_blocos_global: Dict[str, Set[int]], 
+                                 meus_blocos: Set[int], 
+                                 todos_os_blocos_do_arquivo: Set[int]):
         
-        novo_candidato_optimistic = None # comeca sem candidato para esta rodada de 10s
+        
 
         if self._pode_fazer_optimistic_unchoke(timestamp_atual):
             self.ultimo_timestamp_optimistic = timestamp_atual
