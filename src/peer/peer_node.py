@@ -2,7 +2,7 @@ import logging
 import time
 from threading import Thread, Lock
 import requests
-import random 
+import random
 
 from src.peer.p2p_communication import P2PCommunication
 from src.peer.file_manager import FileManager
@@ -10,28 +10,29 @@ from src.peer.strategies.choking_manager import ChokingManager
 from src.peer.strategies.rarest_first import escolher_bloco_mais_raro
 from src.peer.strategies.tit_for_tat_strategy import _calcular_pontuacao_de_raridade_do_peer 
 
-
 class PeerNode:
-    BLOCK_SIZE_BYTES = 16384 
+    BLOCK_SIZE_BYTES = 16384
 
     def __init__(self, peer_id, tracker_url, port, total_blocks=20, download_dir="downloads"):
         self.id = peer_id
         self.tracker_url = tracker_url
-        self.blocks: dict[int, bytes] = {} 
+        self.blocks: dict[int, bytes] = {}
         self.peers_info: dict[str, dict] = {} # Dicionário: peer_id -> {'ip': ..., 'porta': ..., 'blocks': set[int]}
         self.running = True
         self.my_port = port
         self.my_ip = "127.0.0.1"
         self.file_manager = FileManager()
-        self.todos_os_blocos = set(range(total_blocks)) 
+        self.todos_os_blocos = set(range(total_blocks))
         self.total_blocks = total_blocks # Armazena o total de blocos para referência
 
         self.choking_manager = ChokingManager(self.id)
-        
-        # Lock para proteger self.blocks e self.peers_info de acessos concorrentes por threads
-        self.data_lock = Lock() 
 
-        self._completo = False 
+        # Lock para proteger self.blocks e self.peers_info de acessos concorrentes por threads
+        self.data_lock = Lock()
+
+        self._completo = False
+        # Marcar quando o seed comeca
+        self._seeding_start_time = None
 
         logging.basicConfig(
             level=logging.INFO,
@@ -72,7 +73,7 @@ class PeerNode:
             )
             response.raise_for_status()
             data = response.json()
-            
+
             new_peers_data = data.get("peers", [])
             with self.data_lock:
                 self.peers_info.clear()
@@ -124,64 +125,60 @@ class PeerNode:
         """Loop principal para solicitar e baixar blocos."""
         while self.running:
             time.sleep(1)
-            
+
             if self._check_file_complete():
                 if not self._completo:
                     logging.info("🎉 Arquivo completo! Agora atuando como seeder.")
                     self._completo = True
                 continue 
-            else:
-                self._completo = False 
-
 
             with self.data_lock:
                 my_current_blocks = set(self.blocks.keys())
-                
 
                 blocos_faltantes = self.todos_os_blocos - my_current_blocks
                 if blocos_faltantes: # Só loga se houver blocos faltando
                     logging.info(f"Estado dos blocos: Possui {len(my_current_blocks)} de {self.total_blocks}. Faltam: {sorted(list(blocos_faltantes))}")
 
                 peers_map_for_rarity = {
-                    pid: p_data['blocks'] 
-                    for pid, p_data in self.peers_info.items() 
-                    if pid != self.id 
+                    pid: p_data['blocks']
+                    for pid, p_data in self.peers_info.items()
+                    if pid != self.id
                 }
-                
+
                 # Rarest First
                 block_to_request = escolher_bloco_mais_raro(
                     meus_blocos=my_current_blocks,
                     todos_os_blocos_do_arquivo=self.todos_os_blocos,
                     mapa_de_blocos_dos_peers=peers_map_for_rarity
                 )
-                
+
                 logging.info(f"{self.id}: RarestFirst escolheu bloco {block_to_request}")
 
             if block_to_request is None:
                 continue
 
             peers_with_block = []
-            with self.data_lock: 
+            with self.data_lock:
                 for peer_id, peer_data in self.peers_info.items():
                     if peer_id == self.id: # Não tentar baixar de si mesmo
                         continue
                     if block_to_request in peer_data.get('blocks', set()):
                         peers_with_block.append(peer_data)
-            
+
             if not peers_with_block:
                 logging.warning(f"Bloco {block_to_request} identificado como raro, mas nenhum peer conhecido o possui.")
                 continue
 
             # Embaralha para distribuir as requisições, mesmo que o primeiro da lista sempre tenha o bloco
-            random.shuffle(peers_with_block) 
+            random.shuffle(peers_with_block)
 
             downloaded = False
             for peer_data in peers_with_block:
                 peer_address = (peer_data['ip'], peer_data['porta'])
                 logging.info(f"Tentando baixar bloco {block_to_request} de {peer_data['peer_id']} ({peer_address}).")
-                
+
                 downloaded_data = P2PCommunication.request_block(peer_address, block_to_request, self.id)
-                
+
                 if downloaded_data:
                     self._store_blocks([block_to_request], downloaded_data)
                     logging.info(f"✅ Baixou bloco {block_to_request} ({len(downloaded_data)} bytes) de {peer_data['peer_id']}.")
@@ -206,7 +203,7 @@ class PeerNode:
                     break # Passa para o próximo ciclo de download
                 else:
                     logging.warning(f"Falha ao baixar bloco {block_to_request} de {peer_data['peer_id']}. Tentando próximo peer.")
-            
+
             if not downloaded:
                 logging.warning(f"Não foi possível baixar o bloco {block_to_request} de nenhum peer conhecido nesta rodada.")
 
@@ -214,7 +211,7 @@ class PeerNode:
     def _update_peers_from_tracker_loop(self):
         """Loop para periodicamente atualizar a lista de peers do tracker."""
         while self.running:
-            time.sleep(15) 
+            time.sleep(15)
             try:
                 with self.data_lock:
                     my_blocks_list = list(self.blocks.keys())
@@ -225,14 +222,14 @@ class PeerNode:
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                
+
                 new_peers_data = data.get("peers", [])
-                
-                with self.data_lock: 
+
+                with self.data_lock:
                     # Identifica peers que saíram para informar ao choking manager
                     current_peer_ids = set(self.peers_info.keys())
                     updated_peer_ids = {p_data['peer_id'] for p_data in new_peers_data}
-                    
+
                     peers_removed = current_peer_ids - updated_peer_ids
                     for removed_peer_id in peers_removed:
                         logging.info(f"Peer {removed_peer_id} saiu da rede.")
@@ -244,7 +241,7 @@ class PeerNode:
                         if p_data['peer_id'] != self.id: # Não adiciona a si mesmo como peer
                             self.peers_info[p_data['peer_id']] = p_data
                             self.choking_manager.peer_entrou_na_rede(p_data['peer_id'])
-                
+
 
             except requests.exceptions.RequestException as e:
                 logging.warning(f"Falha ao atualizar peers do tracker (conexão/HTTP): {e}")
@@ -255,17 +252,17 @@ class PeerNode:
     def _choking_unchoking_loop(self):
         """Loop para executar o ciclo de choking/unchoking a cada 10 segundos."""
         while self.running:
-            time.sleep(10) 
+            time.sleep(10)
 
             with self.data_lock:
                 # Passa o mapa de blocos dos peers (excluindo a si mesmo) e os blocos que este peer possui.
-                
+
                 mapa_de_blocos_para_choking = {
-                    pid: p_data['blocks'] 
-                    for pid, p_data in self.peers_info.items() 
+                    pid: p_data['blocks']
+                    for pid, p_data in self.peers_info.items()
                     if 'blocks' in p_data # Garante que a chave 'blocks' existe
                 }
-                
+
                 current_timestamp = time.time()
                 self.choking_manager.executar_ciclo_unchoking(
                     timestamp_atual=current_timestamp,
@@ -284,14 +281,11 @@ class PeerNode:
     def shutdown(self):
         """Encerra o peer de forma controlada."""
         logging.info("Iniciando desligamento do peer...")
-        
-        # O sistema deve permitir que um peer se desligue somente após reconstruir o arquivo completo
-        if not self._check_file_complete():
-            logging.warning("Arquivo incompleto. Não foi possível desligar o peer agora.")
 
+        # O sistema deve permitir que um peer se desligue somente após reconstruir o arquivo completo
         self.running = False # Sinaliza para todas as threads de loop pararem
-        time.sleep(2) 
-        
+        time.sleep(2) # da tempo pras threads se desligarem 
+
         logging.info(f"Peer {self.id} finalizado com sucesso.")
 
 
@@ -317,17 +311,30 @@ if __name__ == "__main__":
     )
     peer.start()
 
+    # 50 segundos para seed
+    SEEDING_DURATION_SECONDS = 50
+
     try:
         while peer.running:
-            time.sleep(1)
-            # Verifica se o arquivo está completo para logar ou desligar
-            if peer._check_file_complete() and peer._completo:
-                # Se o arquivo estiver completo, o peer continua a seedar
-                pass 
-            
+            time.sleep(1) # pausa pra evitar espera ocupada
+
+            if peer._check_file_complete():
+                if not peer._completo:
+                    logging.info(f"[{peer.id}] 🎉 Arquivo completo! Iniciando fase de seeding por {SEEDING_DURATION_SECONDS} segundos.")
+                    peer._completo = True
+                    # grava o tempo que o arquivo completa e o seed comeca
+                    peer._seeding_start_time = time.time()
+
+                # checa se a duracao do seed ja passou
+                if peer._seeding_start_time and (time.time() - peer._seeding_start_time >= SEEDING_DURATION_SECONDS):
+                    logging.info(f"[{peer.id}] Tempo de seeding ({SEEDING_DURATION_SECONDS}s) decorrido. Desligando o peer.")
+                    peer.shutdown()
+                    break 
+
+
     except KeyboardInterrupt:
-        logging.info("Ctrl+C detectado. Iniciando desligamento do peer...")
+        logging.info(f"[{peer.id}] Ctrl+C detectado. Iniciando desligamento do peer...")
         peer.shutdown()
     except Exception as e:
-        logging.critical(f"Erro fatal no loop principal do peer: {e}", exc_info=True)
+        logging.critical(f"[{peer.id}] Erro fatal no loop principal do peer: {e}", exc_info=True)
         peer.shutdown()
